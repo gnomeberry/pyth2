@@ -8,10 +8,10 @@ Created on 2016/01/24
 '''
 import os
 import codecs
-import encodings
 import json
+import sys
 
-
+FILESYSTEM_CHARACTER_ENCODING = sys.getfilesystemencoding()
 STAGING_CONTEXT_FILE_PATTERN = "%s_context"
 
 def ensureDirectory(path):
@@ -61,7 +61,6 @@ def fileRegexComparator(regex, onlyBaseName = True, errorOnMismatch = True, *fou
             return 0
     return comparator
 
-
 class FilesystemBoundObject(object):
     
     def __init__(self, isFileObject = True):
@@ -76,6 +75,25 @@ class FilesystemBoundObject(object):
         else:
             ensureDirectory(self.assocFile())
 
+class FilesystemView(FilesystemBoundObject):
+    
+    def __init__(self, stage, files):
+        super(FilesystemView, self).__init__(False)
+        self.__stage = stage
+        self.__files = tuple(files)
+    
+    def assocFile(self):
+        return self.__stage.assocFile()
+    
+    def listFiles(self, sort_comparator = None):
+        if callable(sort_comparator):
+            return tuple(sorted(self.__files, cmp = sort_comparator))
+        else:
+            return self.__files
+    
+    def commit(self):
+        self.__stage.__commit_currentView(self)
+
 class Stages(object):
     '''
     Stageをまとめたもの
@@ -85,11 +103,12 @@ class Stages(object):
     stages = []
     
     def __init__(self, baseDirectory):
-        self.baseDirectory = unicode(baseDirectory)
+        self.baseDirectory = unicode(baseDirectory, FILESYSTEM_CHARACTER_ENCODING) if not isinstance(baseDirectory, unicode) else baseDirectory
         ensureDirectory(self.baseDirectory)
         
     def addStage(self, stageName = "", changeBaseDir = None):
         if changeBaseDir:
+            changeBaseDir = unicode(changeBaseDir, FILESYSTEM_CHARACTER_ENCODING) if not isinstance(changeBaseDir, unicode) else changeBaseDir
             ensureDirectory(changeBaseDir)
         else:
             changeBaseDir = self.baseDirectory
@@ -147,7 +166,7 @@ class Stage(FilesystemBoundObject):
         if not name:
             raise ValueError("%s is not valid for stage name" % name)
         self.__stageManager = stageManager
-        self._name = unicode(name)
+        self._name = unicode(name, FILESYSTEM_CHARACTER_ENCODING) if not isinstance(name, unicode) else name
         self._baseDirectory = baseDirectory
         self.__stageDirectory = os.path.join(self._baseDirectory, self._name)
         self.__context = self.StageContext(self)
@@ -184,13 +203,20 @@ class Stage(FilesystemBoundObject):
     def context(self):
         return self.__context
     
-    def listFiles(self, sort_comparator = None):
-        entries = os.listdir(self.assocFile())
-        if callable(sort_comparator):
-            return sorted(entries, cmp = sort_comparator)
+    def currentView(self):
+        return FilesystemView(self, [os.path.join(self.__stageDirectory, (unicode(fpath, FILESYSTEM_CHARACTER_ENCODING) if not isinstance(fpath, unicode) else fpath)) for fpath in os.listdir(self.assocFile())])
+    
+    def __commit_currentView(self, filesystemView):
+        print "Commit current view", filesystemView.listFiles()
+        nextStage = self.nextStage()
+        print "Next stage=%s" % nextStage
+        if nextStage:
+            pass
         else:
-            return entries
-
+            # delete?
+            pass
+    
+    
 x=Stages("z:\\hoge")
 print x.baseDirectory
 stage1 = x.addStage("stage1")
@@ -198,3 +224,6 @@ ctx = stage1.context().load()
 ctx["val1"] = 1
 ctx["val2"] = "abc"
 stage1.context().store()
+fsv = stage1.currentView()
+for fn in fsv.listFiles(fileRegexComparator(r"(.*)(\d+).*$", True, False, unicode, int)):
+    print fn
