@@ -88,7 +88,7 @@ if __name__ == "__main__":
     def puts(args):
         print args
         return args
-    baz = ConsTranslator(lambda decoParams, *args, **kwds: decoParams[0](*puts(args), **puts(kwds)))
+    baz = ConsTranslator(lambda decoParams, *args, **kwds: puts(decoParams) and decoParams[0](*puts(args), **puts(kwds)))
     @baz()
     def foofoo(a, b):
         print a, b
