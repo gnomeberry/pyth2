@@ -2,14 +2,13 @@
 '''
 Created on 2016/01/24
 
-
-
 @author: oreyou
 '''
-import os
 import codecs
 import json
+import os
 import sys
+
 
 FILESYSTEM_CHARACTER_ENCODING = sys.getfilesystemencoding()
 STAGING_CONTEXT_FILE_PATTERN = "%s_context"
@@ -77,10 +76,11 @@ class FilesystemBoundObject(object):
 
 class FilesystemView(FilesystemBoundObject):
     
-    def __init__(self, stage, files):
+    def __init__(self, stage, files, autoCommit):
         super(FilesystemView, self).__init__(False)
         self.__stage = stage
         self.__files = tuple(files)
+        self.autoCommit = autoCommit
     
     def assocFile(self):
         return self.__stage.assocFile()
@@ -93,6 +93,15 @@ class FilesystemView(FilesystemBoundObject):
     
     def commit(self):
         self.__stage.__commit_currentView(self)
+    
+    def __enter__(self):
+        pass
+    
+    def __exit__(self, excType, excInstance, excTrace):
+        if not excInstance:
+            raise
+        elif self.autoCommit:
+            self.commit()
 
 class Stages(object):
     '''
@@ -136,28 +145,35 @@ class Stage(FilesystemBoundObject):
     
     class StageContext(FilesystemBoundObject):
         
-        obj = dict()
-        
         def __init__(self, stage):
             super(stage.StageContext, self).__init__(True)
             self.stage = stage
+            self.__frozen = self.__dict__.keys() + ["_StageContext__frozen"]
         
         def assocFile(self):
             return os.path.join(self.stage._baseDirectory, STAGING_CONTEXT_FILE_PATTERN % self.stage._name)
         
+        def __attributes(self):
+            return {k: getattr(self, k) for k in self.__dict__ if not k in self.__frozen}
+        
+        def __contains__(self, k):
+            return hasattr(self, k)
+        
+        def clear(self):
+            for k in [_ for _ in self.__dict__ if not _ in self.__frozen]:
+                delattr(self, k)
+        
         def store(self):
             self.ensureFile()
             with codecs.open(self.assocFile(), "wb", "utf-8", buffering = 1) as fp:
-                json.dump(self.obj, fp, indent = 4)
+                json.dump(self.__attributes(), fp, indent = 4)
         
         def load(self):
             self.ensureFile()
-            try:
-                with codecs.open(self.assocFile(), "rb", "utf-8", buffering = 1) as fp:
-                    self.obj = json.load(fp)
-            except:
-                self.obj = dict()
-            return self.obj
+            self.clear()
+            with codecs.open(self.assocFile(), "rb", "utf-8", buffering = 1) as fp:
+                for k, v in json.load(fp).items():
+                    setattr(self, k, v)
     
     def __init__(self, stageManager, baseDirectory, name):
         super(Stage, self).__init__(False)
@@ -203,8 +219,11 @@ class Stage(FilesystemBoundObject):
     def context(self):
         return self.__context
     
-    def currentView(self):
-        return FilesystemView(self, [os.path.join(self.__stageDirectory, (unicode(fpath, FILESYSTEM_CHARACTER_ENCODING) if not isinstance(fpath, unicode) else fpath)) for fpath in os.listdir(self.assocFile())])
+    def currentView(self, pathSelector = None, autoCommit = False):
+        files = (os.path.join(self.__stageDirectory, (unicode(fpath, FILESYSTEM_CHARACTER_ENCODING) if not isinstance(fpath, unicode) else fpath)) for fpath in os.listdir(self.assocFile()))
+        if pathSelector and callable(pathSelector):
+            files = (fpath for fpath in files if pathSelector(fpath))
+        return FilesystemView(self, list(files), autoCommit)
     
     def __commit_currentView(self, filesystemView):
         print "Commit current view", filesystemView.listFiles()
@@ -216,14 +235,20 @@ class Stage(FilesystemBoundObject):
             # delete?
             pass
     
-    
-x=Stages("z:\\hoge")
-print x.baseDirectory
-stage1 = x.addStage("stage1")
-ctx = stage1.context().load()
-ctx["val1"] = 1
-ctx["val2"] = "abc"
-stage1.context().store()
-fsv = stage1.currentView()
-for fn in fsv.listFiles(fileRegexComparator(r"(.*)(\d+).*$", True, False, unicode, int)):
-    print fn
+if __name__ == "__main__":
+    x=Stages("z:\\hoge")
+    print x.baseDirectory
+    stage1 = x.addStage("stage1")
+    ctx = stage1.context()
+    ctx.load()
+    if "initial" in ctx:
+        print ctx.val1, ctx.val2
+    ctx.initial = False
+    ctx.val1 = 1
+    ctx.val2 = "abc"
+    ctx.store()
+    ctx.clear()
+    print ctx.val1
+    fsv = stage1.currentView()
+    for fn in fsv.listFiles(fileRegexComparator(r"(.*)(\d+).*$", True, False, unicode, int)):
+        print fn

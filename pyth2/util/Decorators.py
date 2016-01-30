@@ -107,7 +107,7 @@ class SynchronizedInvocator(object):
         finally:
             self.__lockObject.release()
 
-synchronized = ConsProxy(SynchronizedInvocator)
+synchronized = ConsProxy(SynchronizedInvocator) # synchronized decorator
 
 class MemoizeInvocator(object):
     '''
@@ -115,7 +115,6 @@ class MemoizeInvocator(object):
     '''
     maximumMemoSize = None
     func = None
-    __lock = Lock()
     __memo = dict()
     
     @staticmethod
@@ -142,21 +141,18 @@ class MemoizeInvocator(object):
         self.compaction = compaction if callable(compaction) else lambda maxMemoSize, index, item: item[0]
         self.func = func 
     
-    @synchronized(__lock)
     def _addMemo(self, argTuple, results, errors):
         self.__memo[argTuple] = [time() * 10000, results, errors]
         if self.maximumMemoSize and len(self.__memo) > self.maximumMemoSize:
             removeKey = min(enumerate(self.__memo.iteritems()), key = lambda a: self.compaction(self.maximumMemoSize, a[0], a[1]))
             self.__memo.pop(removeKey[1][0])
     
-    @synchronized(__lock)
     def _findMemo(self, argTuple):
         if self.__memo.has_key(argTuple):
             return self.__memo.get(argTuple)
         else:
             return None
     
-    @synchronized(__lock)
     def _updateMemo(self, argTuple):
         self.__memo[argTuple][0] = time() * 10000
     
