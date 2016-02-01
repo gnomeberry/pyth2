@@ -126,8 +126,13 @@ class MemoizeInvocator(object):
         return val
     
     @staticmethod
-    def _argTuple(args, kwds):
+    def _argTuple_Freezed(args, kwds):
         return MemoizeInvocator.__freeze((args, kwds))
+    
+    @staticmethod
+    def _argTuple_Serialized(args, kwds):
+        import cPickle
+        return cPickle.dumps((args, kwds))
     
     def setDecoratorParams(self, func, memoSize = None, compaction = None):
         '''
@@ -139,7 +144,8 @@ class MemoizeInvocator(object):
         '''
         self.maximumMemoSize = None if memoSize is None else max((1, int(memoSize)))
         self.compaction = compaction if callable(compaction) else lambda maxMemoSize, index, item: item[0]
-        self.func = func 
+        self.func = func
+        self.func._argTuple = MemoizeInvocator._argTuple_Freezed 
     
     def _addMemo(self, argTuple, results, errors):
         self.__memo[argTuple] = [time() * 10000, results, errors]
@@ -157,7 +163,11 @@ class MemoizeInvocator(object):
         self.__memo[argTuple][0] = time() * 10000
     
     def __call__(self, *args, **kwds):
-        argTuple = MemoizeInvocator._argTuple(args, kwds)
+        try:
+            argTuple = self.func._argTuple(args, kwds)
+        except:
+            self.func._argTuple = MemoizeInvocator._argTuple_Serialized
+            argTuple = self.func._argTuple(args, kwds)
         memo = self._findMemo(argTuple)
         if not memo:
             # miss cache
