@@ -145,7 +145,8 @@ class MemoizeInvocator(object):
         self.maximumMemoSize = None if memoSize is None else max((1, int(memoSize)))
         self.compaction = compaction if callable(compaction) else lambda maxMemoSize, index, item: item[0]
         self.func = func
-        self.func._argTuple = MemoizeInvocator._argTuple_Freezed 
+        self.func._argTuple = MemoizeInvocator._argTuple_Freezed
+        self.func._argTupleFailed = False 
     
     def _addMemo(self, argTuple, results, errors):
         self.__memo[argTuple] = [time() * 10000, results, errors]
@@ -163,11 +164,15 @@ class MemoizeInvocator(object):
         self.__memo[argTuple][0] = time() * 10000
     
     def __call__(self, *args, **kwds):
-        try:
-            argTuple = self.func._argTuple(args, kwds)
-        except:
-            self.func._argTuple = MemoizeInvocator._argTuple_Serialized
-            argTuple = self.func._argTuple(args, kwds)
+        if not self.func._argTupleFailed:
+            try:
+                argTuple = self.func._argTuple(args, kwds)
+            except:
+                self.func._argTupleFailed = True
+                self.func._argTuple = MemoizeInvocator._argTuple_Serialized
+                argTuple = self.func._argTuple(args, kwds)
+        else:
+            argTuple = self.func._argTuple(args, kwds)                                                                                                                                 
         memo = self._findMemo(argTuple)
         if not memo:
             # miss cache
