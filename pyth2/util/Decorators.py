@@ -8,6 +8,7 @@ import functools
 import sys
 from threading import Lock
 from time import time
+from datetime import datetime
 
 
 def getOriginalDecoratee(decorated):
@@ -23,7 +24,7 @@ def ConsProxy(delegatorType):
     example))
     class DecoratorDelegator(object):
         
-        def setDecoratorParams(self, func, *args, **kwds): # optional setter for decorator's parameters
+        def __init__(self, func, *args, **kwds): # decorator's parameters
             print "func, deco args, deco kwds=", func, args, kwds
         
         def __call__(self, *args, **kwds):
@@ -45,9 +46,7 @@ def ConsProxy(delegatorType):
     
     def decorate(*decoArgs, **decoKwds):
         def wrapper(func):
-            delegator = delegatorType()
-            if hasattr(delegator, "setDecoratorParams") and callable(delegator.setDecoratorParams):
-                delegator.setDecoratorParams(func, *decoArgs, **decoKwds)
+            delegator = delegatorType(func, *decoArgs, **decoKwds)
             delegator._decorator_args = (func, decoArgs, decoKwds)
             @functools.wraps(func)
             def wrapped(*args, **kwds):
@@ -84,9 +83,8 @@ def ConsTranslator(translator):
     return decorate
 
 class SynchronizedInvocator(object):
-    __lockObject = Lock()
     
-    def setDecoratorParams(self, func, lockObject = None):
+    def __init__(self, func, lockObject = None):
         self.__func = func
         self.__lockObject = Lock() if not lockObject else lockObject
     
@@ -123,6 +121,8 @@ class MemoizeInvocator(object):
             return frozenset((key, MemoizeInvocator.__freeze(value)) for key, value in val.items())
         elif isinstance(val, (list, tuple)):
             return tuple(MemoizeInvocator.__freeze(value) for value in val)
+        elif not hasattr(val, "__hash__"):
+            return id(val)
         return val
     
     @staticmethod
@@ -134,7 +134,7 @@ class MemoizeInvocator(object):
         import cPickle
         return cPickle.dumps((args, kwds))
     
-    def setDecoratorParams(self, func, memoSize = None, compaction = None):
+    def __init__(self, func, memoSize = None, compaction = None):
         '''
         Setup function
         
@@ -167,6 +167,7 @@ class MemoizeInvocator(object):
         if not self.func._argTupleFailed:
             try:
                 argTuple = self.func._argTuple(args, kwds)
+                hash(argTuple) # test argTuple is hashable
             except:
                 self.func._argTupleFailed = True
                 self.func._argTuple = MemoizeInvocator._argTuple_Serialized
@@ -193,10 +194,53 @@ class MemoizeInvocator(object):
 
 memoize = ConsProxy(MemoizeInvocator) # Memoize decorator
 
+class Timestamper(object):
+    
+    timestamped = set()
+    
+    @staticmethod
+    def getTimestamper(afunc):
+        return afunc._timestamper
+    
+    def __init__(self, func, storeMinMaxArgs = True):
+        self.func = func
+        self.storeMinMaxArgs = storeMinMaxArgs
+        self.maxStamp = [-float("inf"), None]
+        self.minStamp = [float("inf"), None]
+        self.invocationTimes = 0
+        self.sumStamp = 0
+        self.func._timestamper = self
+        Timestamper.timestamped.add(self)
+    
+    def __str__(self):
+        return "%s[invoke=%d, mean=%f, min=(%f, args=%s), max=(%f, args=%s)" % (self.func, self.invocationTimes, self.getMeanTime(), self.minStamp[0], self.minStamp[1], self.maxStamp[0], self.maxStamp[1])
+    
+    def __call__(self, *args, **kwds):
+        self.invocationTimes += 1
+        begin = datetime.now()
+        try:
+            return self.func(*args, **kwds)
+        finally:
+            diff = (datetime.now() - begin).microseconds
+            if self.maxStamp[0] < diff:
+                self.maxStamp[0] = diff
+                if self.storeMinMaxArgs:
+                    self.maxStamp[1] = (args, kwds)
+            if self.minStamp[0] > diff:
+                self.minStamp[0] = diff
+                if self.storeMinMaxArgs:
+                    self.minStamp[1] = (args, kwds)
+            self.sumStamp += diff
+    
+    def getMeanTime(self):
+        return float(self.sumStamp) / self.invocationTimes
+
+timestamp = ConsProxy(Timestamper)
+
 if __name__ == "__main__":
     class DecoratorDelegator(object):
         
-        def setDecoratorParams(self, func, *args, **kwds):
+        def __init__(self, func, *args, **kwds):
             print "func, deco args, deco kwds=", func, args, kwds
         
         def __call__(self, *args, **kwds):
@@ -224,4 +268,12 @@ if __name__ == "__main__":
         return 1 if n <= 0 else n * factorial(n - 1)
     for i in xrange(100):
         print i, factorial(i)
+    
+    @timestamp()
+    def bar(n):
+        for i in xrange(n):
+            pass
+    for i in xrange(100):
+        bar(10000 * i)
+    print Timestamper.getTimestamper(bar)
     
