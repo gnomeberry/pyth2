@@ -9,19 +9,30 @@ class IterableExtension(object):
     
     @property
     def each(self):
+        sentry = object()
         selv = self
         rest = iter(selv)
-        first = rest.next() if selv else None
+        first = next(rest, sentry)
+        def _collector():
+            if first is sentry:
+                return
+            yield first
+            for elm in rest:
+                yield elm
+        
         class _each(object):
             def __getattr__(self, name):
+                if first is sentry:
+                    return lambda *args, **kwds: EachableGenerator.nullObject() # for invocation safety
+                
                 piv = getattr(first, name)
                 if callable(piv):
-                    return lambda *args, **kwds: EachableGenerator((getattr(elm, name)(*args, **kwds) for elm in selv))
+                    return lambda *args, **kwds: EachableGenerator((getattr(elm, name)(*args, **kwds) for elm in _collector()))
                 else:
-                    return EachableGenerator((getattr(elm, name) for elm in selv))
+                    return EachableGenerator((getattr(elm, name) for elm in _collector()))
             
             def __setattr__(self, name, value):
-                for elm in selv:
+                for elm in _collector():
                     setattr(elm, name, value)
                 return selv
         return _each()
@@ -35,23 +46,39 @@ class IterableExtension(object):
                 init = init + transOp(elm)
         return init
     
-    def select(self, predOp):
-        return EachableGenerator(transed for transed in (predOp(elm) for elm in self) if transed)
+    def convolve(self, init, reduceOp):
+        for elm in self:
+            init = reduceOp(init, elm)
+        return init
+    
+    def select(self, transOp):
+        return EachableGenerator(transed for transed in (transOp(elm) for elm in self))
     
     def where(self, predOp):
         return EachableGenerator(elm for elm in self if predOp(elm))
     
-    def asList(self):
+    @property
+    def count(self):
+        return self.agg(0, lambda x: 1)
+    
+    @property
+    def toList(self):
         return self if isinstance(self, List) else List(self)
     
-    def asTuple(self):
+    @property
+    def toTuple(self):
         return self if isinstance(self, Tuple) else Tuple(self)
     
-    def asSet(self):
+    @property
+    def toSet(self):
         return self if isinstance(self, Set) else Set(self)
     
 
 class EachableGenerator(IterableExtension):
+    
+    @staticmethod
+    def nullObject():
+        return EachableGenerator((_ for _ in []))
     
     def __init__(self, gen):
         self.gen = gen
@@ -74,7 +101,7 @@ class Tuple(tuple, IterableExtension):
 
 if __name__ == "__main__":
     a = List((1, 2, 3, 4))
-    print a.where(lambda x: x.bit_length() > 1).each.bit_length().asList()
+    print a.where(lambda x: x.bit_length() > 1).each.bit_length().toList
     
     class Foo(object):
         Bar = None
@@ -87,10 +114,13 @@ if __name__ == "__main__":
         def __repr__(self, *args, **kwargs):
             return self.__str__()
         
-    b = List((1, 2, 3, 4)).select(lambda x: Foo(x)).asList()
+    b = List((1, 2, 3, 4)).select(lambda x: Foo(x)).toList
     print b
-    print b.where(lambda x: x.Bar < 3).asList()
+    print b.where(lambda x: x.Bar < 3).toList
     b.where(lambda x: x.Bar < 3).each.Bar = 10 # BUG
     print b
-    b.where(lambda x: x.Bar < 3).asList().each.Bar = 10
+    b.where(lambda x: x.Bar < 3).toList.each.Bar = 10
     print b
+    
+    c = List(())
+    print c.each.bit_length().toList
