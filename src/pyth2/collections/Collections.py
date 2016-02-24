@@ -4,6 +4,8 @@ Created on 2016/02/23
 
 @author: _
 '''
+from numbers import Number, Complex
+
 
 class IterableExtension(object):
     
@@ -35,6 +37,84 @@ class IterableExtension(object):
                 for elm in _collector():
                     setattr(elm, name, value)
                 return selv
+            
+            def __add__(self, other):
+                """self + other"""
+                return EachableGenerator(elm + other for elm in _collector())
+            
+            def __radd__(self, other):
+                """other + self"""
+                return EachableGenerator(other + elm for elm in _collector())
+            
+            def __neg__(self):
+                """-self"""
+                return EachableGenerator(-elm for elm in _collector())
+            
+            def __pos__(self):
+                """+self"""
+                return EachableGenerator(_collector())
+            
+            def __sub__(self, other):
+                """self - other"""
+                return EachableGenerator(elm - other for elm in _collector())
+            
+            def __rsub__(self, other):
+                """other - self"""
+                return EachableGenerator(other - elm for elm in _collector())
+            
+            def __mul__(self, other):
+                """self * other"""
+                return EachableGenerator(elm * other for elm in _collector())
+            
+            def __rmul__(self, other):
+                """other * self"""
+                return EachableGenerator(other * elm for elm in _collector())
+            
+            def __div__(self, other):
+                """self / other without __future__ division
+        
+                May promote to float.
+                """
+                other = float(other)
+                return EachableGenerator(elm / other for elm in _collector())
+            
+            def __rdiv__(self, other):
+                """other / self without __future__ division"""
+                return EachableGenerator(other / elm for elm in _collector())
+            
+            def __truediv__(self, other):
+                """self / other with __future__ division.
+                
+                Should promote to float when necessary.
+                """
+                other = float(other)
+                return EachableGenerator(elm / other for elm in _collector())
+            
+            def __rtruediv__(self, other):
+                """other / self with __future__ division"""
+                other = float(other)
+                return EachableGenerator(other / elm for elm in _collector())
+            
+            def __pow__(self, exponent):
+                """self**exponent; should promote to float or complex when necessary."""
+                return EachableGenerator(elm ** exponent for elm in _collector())
+            
+            def __rpow__(self, base):
+                """base ** self"""
+                return EachableGenerator(base ** elm for elm in _collector())
+            
+            def __abs__(self):
+                """Returns the Real distance from 0. Called for abs(self)."""
+                return EachableGenerator(abs(elm) for elm in _collector())
+            
+            def __eq__(self, other):
+                """self == other"""
+                return EachableGenerator(elm == other for elm in _collector())
+            
+            def __ne__(self, other):
+                """self != other"""
+                return EachableGenerator(elm != other for elm in _collector())
+            
         return _each()
     
     def agg(self, init, transOp = None):
@@ -58,7 +138,7 @@ class IterableExtension(object):
         return EachableGenerator(elm for elm in self if predOp(elm))
     
     @property
-    def count(self):
+    def length(self):
         return self.agg(0, lambda x: 1)
     
     @property
@@ -89,6 +169,83 @@ class EachableGenerator(IterableExtension):
     def next(self):
         return self.gen.next()
     
+    def __add__(self, other):
+        """self + other"""
+        return EachableGenerator(elm + other for elm in self.gen)
+    
+    def __radd__(self, other):
+        """other + self"""
+        return EachableGenerator(other + elm for elm in self.gen)
+    
+    def __neg__(self):
+        """-self"""
+        return EachableGenerator(-elm for elm in self.gen)
+    
+    def __pos__(self):
+        """+self"""
+        return self
+    
+    def __sub__(self, other):
+        """self - other"""
+        return EachableGenerator(elm - other for elm in self.gen)
+    
+    def __rsub__(self, other):
+        """other - self"""
+        return EachableGenerator(other - elm for elm in self.gen)
+    
+    def __mul__(self, other):
+        """self * other"""
+        return EachableGenerator(elm * other for elm in self.gen)
+    
+    def __rmul__(self, other):
+        """other * self"""
+        return EachableGenerator(other * elm for elm in self.gen)
+    
+    def __div__(self, other):
+        """self / other without __future__ division
+
+        May promote to float.
+        """
+        other = float(other)
+        return EachableGenerator(elm / other for elm in self.gen)
+    
+    def __rdiv__(self, other):
+        """other / self without __future__ division"""
+        return EachableGenerator(other / elm for elm in self.gen)
+    
+    def __truediv__(self, other):
+        """self / other with __future__ division.
+        
+        Should promote to float when necessary.
+        """
+        other = float(other)
+        return EachableGenerator(elm / other for elm in self.gen)
+    
+    def __rtruediv__(self, other):
+        """other / self with __future__ division"""
+        other = float(other)
+        return EachableGenerator(other / elm for elm in self.gen)
+    
+    def __pow__(self, exponent):
+        """self**exponent; should promote to float or complex when necessary."""
+        return EachableGenerator(elm ** exponent for elm in self.gen)
+    
+    def __rpow__(self, base):
+        """base ** self"""
+        return EachableGenerator(base ** elm for elm in self.gen)
+    
+    def __abs__(self):
+        """Returns the Real distance from 0. Called for abs(self)."""
+        return EachableGenerator(abs(elm) for elm in self.gen)
+    
+    def __eq__(self, other):
+        """self == other"""
+        return EachableGenerator(elm == other for elm in self.gen)
+    
+    def __ne__(self, other):
+        """self != other"""
+        return EachableGenerator(elm != other for elm in self.gen)
+    
 
 class List(list, IterableExtension):
     pass
@@ -117,10 +274,16 @@ if __name__ == "__main__":
     b = List((1, 2, 3, 4)).select(lambda x: Foo(x)).toList
     print b
     print b.where(lambda x: x.Bar < 3).toList
-    b.where(lambda x: x.Bar < 3).each.Bar = 10 # BUG
+    b.where(lambda x: x.Bar < 3).each.Bar = 10
     print b
     b.where(lambda x: x.Bar < 3).toList.each.Bar = 10
     print b
     
     c = List(())
     print c.each.bit_length().toList
+    print c.length
+    
+    d = List([1, 2.0, -3, 0 + 4j])
+    print (d.each ** 2).toList
+    print (8 + (d.each ** 2) / 3.0).toList
+    print ((2 + 3j) ** (d.each ** 2) / 3.0).toList
