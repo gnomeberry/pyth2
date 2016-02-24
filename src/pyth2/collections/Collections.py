@@ -4,7 +4,7 @@ Created on 2016/02/23
 
 @author: _
 '''
-from numbers import Number, Complex
+import types
 
 
 class IterableExtension(object):
@@ -38,83 +38,6 @@ class IterableExtension(object):
                     setattr(elm, name, value)
                 return selv
             
-            def __add__(self, other):
-                """self + other"""
-                return EachableGenerator(elm + other for elm in _collector())
-            
-            def __radd__(self, other):
-                """other + self"""
-                return EachableGenerator(other + elm for elm in _collector())
-            
-            def __neg__(self):
-                """-self"""
-                return EachableGenerator(-elm for elm in _collector())
-            
-            def __pos__(self):
-                """+self"""
-                return EachableGenerator(_collector())
-            
-            def __sub__(self, other):
-                """self - other"""
-                return EachableGenerator(elm - other for elm in _collector())
-            
-            def __rsub__(self, other):
-                """other - self"""
-                return EachableGenerator(other - elm for elm in _collector())
-            
-            def __mul__(self, other):
-                """self * other"""
-                return EachableGenerator(elm * other for elm in _collector())
-            
-            def __rmul__(self, other):
-                """other * self"""
-                return EachableGenerator(other * elm for elm in _collector())
-            
-            def __div__(self, other):
-                """self / other without __future__ division
-        
-                May promote to float.
-                """
-                other = float(other)
-                return EachableGenerator(elm / other for elm in _collector())
-            
-            def __rdiv__(self, other):
-                """other / self without __future__ division"""
-                return EachableGenerator(other / elm for elm in _collector())
-            
-            def __truediv__(self, other):
-                """self / other with __future__ division.
-                
-                Should promote to float when necessary.
-                """
-                other = float(other)
-                return EachableGenerator(elm / other for elm in _collector())
-            
-            def __rtruediv__(self, other):
-                """other / self with __future__ division"""
-                other = float(other)
-                return EachableGenerator(other / elm for elm in _collector())
-            
-            def __pow__(self, exponent):
-                """self**exponent; should promote to float or complex when necessary."""
-                return EachableGenerator(elm ** exponent for elm in _collector())
-            
-            def __rpow__(self, base):
-                """base ** self"""
-                return EachableGenerator(base ** elm for elm in _collector())
-            
-            def __abs__(self):
-                """Returns the Real distance from 0. Called for abs(self)."""
-                return EachableGenerator(abs(elm) for elm in _collector())
-            
-            def __eq__(self, other):
-                """self == other"""
-                return EachableGenerator(elm == other for elm in _collector())
-            
-            def __ne__(self, other):
-                """self != other"""
-                return EachableGenerator(elm != other for elm in _collector())
-            
         return _each()
     
     def agg(self, init, transOp = None):
@@ -137,6 +60,30 @@ class IterableExtension(object):
     def where(self, predOp):
         return EachableGenerator(elm for elm in self if predOp(elm))
     
+    def group(self, labelOp):
+        grp = {}
+        for elm in self:
+            label = labelOp(elm)
+            if label in grp:
+                grp[label].append(elm)
+            else:
+                grp[label] = List([elm])
+        return grp
+    
+    @property
+    def flatten(self):
+        def _flatten(ao):
+            if isinstance(ao, (list, tuple, set, types.GeneratorType)):
+                for elm in ao:
+                    if isinstance(elm, (list, tuple, set, types.GeneratorType)):
+                        for inElm in _flatten(elm):
+                            yield inElm
+                    else:
+                        yield elm
+            else:
+                yield ao
+        return EachableGenerator(_flatten(self))
+    
     @property
     def length(self):
         return self.agg(0, lambda x: 1)
@@ -152,6 +99,10 @@ class IterableExtension(object):
     @property
     def toSet(self):
         return self if isinstance(self, Set) else Set(self)
+    
+    @property
+    def toGenerator(self):
+        return self if isinstance(object, EachableGenerator) else EachableGenerator(self)
     
 
 class EachableGenerator(IterableExtension):
@@ -284,6 +235,12 @@ if __name__ == "__main__":
     print c.length
     
     d = List([1, 2.0, -3, 0 + 4j])
-    print (d.each ** 2).toList
-    print (8 + (d.each ** 2) / 3.0).toList
-    print ((2 + 3j) ** (d.each ** 2) / 3.0).toList
+    print (d.toGenerator ** 2).toList
+    print (8 + (d.toGenerator ** 2) / 3.0).toList
+    print ((2 + 3j) ** (d.toGenerator ** 2) / 3.0).toList
+    
+    e = List((1, (2, 3), 4, (5, (6, (7,))), 8))
+    eGroup = e.flatten.group(lambda x: x < 4)
+    print eGroup
+    print (eGroup[True].toGenerator / 3.0).toList
+    print (eGroup[False].toGenerator * 3.0).toList
