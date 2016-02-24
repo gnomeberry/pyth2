@@ -82,7 +82,7 @@ def ConsTranslator(translator):
 if __name__ == "__main__":
     class DecoratorDelegator(object):
         
-        def __init__(self, func, *args. **kwds):
+        def __init__(self, func, *args, **kwds):
             print "func, deco args, deco kwds=", func, args, kwds
         
         def __call__(self, *args, **kwds):

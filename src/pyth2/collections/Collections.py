@@ -71,11 +71,11 @@ class IterableExtension(object):
         return grp
     
     @property
-    def flatten(self):
+    def flat(self):
         def _flatten(ao):
-            if isinstance(ao, (list, tuple, set, types.GeneratorType)):
+            if hasattr(ao, "__iter__"):
                 for elm in ao:
-                    if isinstance(elm, (list, tuple, set, types.GeneratorType)):
+                    if hasattr(elm, "__iter__"):
                         for inElm in _flatten(elm):
                             yield inElm
                     else:
@@ -83,6 +83,9 @@ class IterableExtension(object):
             else:
                 yield ao
         return EachableGenerator(_flatten(self))
+    
+    def flatMap(self, transOp):
+        return EachableGenerator(transOp(elm) for elm in self.flat)
     
     @property
     def length(self):
@@ -240,7 +243,16 @@ if __name__ == "__main__":
     print ((2 + 3j) ** (d.toGenerator ** 2) / 3.0).toList
     
     e = List((1, (2, 3), 4, (5, (6, (7,))), 8))
-    eGroup = e.flatten.group(lambda x: x < 4)
+    eGroup = e.flat.group(lambda x: x < 4)
     print eGroup
-    print (eGroup[True].toGenerator / 3.0).toList
+    print (-(eGroup[True].toGenerator / 3.0)).toList
     print (eGroup[False].toGenerator * 3.0).toList
+    
+    f = List(("abc", "DEF", "gHi"))
+    print f
+    print List(f.each.upper())
+    print f.select(lambda x: List(x)).toList
+    print f.select(lambda x: List(x)).flatMap(lambda x: x.upper()).toList
+    print "".join(f.select(lambda x: List(x)).flatMap(lambda x: x.upper()).toList)
+    
+    
