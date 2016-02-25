@@ -4,33 +4,37 @@ Created on 2016/02/09
 
 @author: _
 '''
-from threading import Lock
+
+import threading
 
 from pyth2.deco.Decorators import ConsProxy
 
 
 class SynchronizedInvocator(object):
-    __lockObject = Lock()
     
-    def setDecoratorParams(self, func, lockObject = None):
+    def __init__(self, func, condition = None):
         self.__func = func
-        self.__lockObject = Lock() if not lockObject else lockObject
+        self.__lock = threading.Condition() if not isinstance(condition, threading.Condition) else condition
+    
+    @property
+    def lock(self):
+        return self.__lock
     
     def __call__(self, *args, **kwds):
         try:
-            self.__lockObject.acquire()
+            self.__lock.acquire()
             return self.__func(*args, **kwds)
         finally:
-            self.__lockObject.release()
+            self.__lock.release()
     
     def __enter__(self):
-        self.__lockObject.acquire()
+        self.__lock.acquire()
         
     def __exit__(self, exc_type, exc_instance, exc_trace): # @UnusedVariable
         try:
             if exc_instance:
                 raise
         finally:
-            self.__lockObject.release()
+            self.__lock.release()
 
 synchronized = ConsProxy(SynchronizedInvocator) # synchronized decorator

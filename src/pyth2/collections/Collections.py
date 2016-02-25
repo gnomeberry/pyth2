@@ -255,4 +255,13 @@ if __name__ == "__main__":
     print f.select(lambda x: List(x)).flatMap(lambda x: x.upper()).toList
     print "".join(f.select(lambda x: List(x)).flatMap(lambda x: x.upper()).toList)
     
-    
+    from pyth2.concurrent import Concurrent
+    executor = Concurrent.Executor(True, 10)
+    def hanoi(n, start, end, work):
+        if n > 0:
+            k = hanoi(n - 1, start, work, end)
+            return hanoi(n - 1, work, end, start) + k + 1
+        return 0
+    g = List(range(22))
+    print g
+    print g.select(lambda x: executor.submit(lambda: hanoi(x, "A", "B", "C"))).select(lambda future: future.getSafe()).toList
