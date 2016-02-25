@@ -77,6 +77,57 @@ def ConsTranslator(translator):
     
     return decorate
 
+ANNOTATION_FIELD_NAME = "_annotations"
+def ConsAnnotation(annotatorType):
+    
+    if not isinstance(annotatorType, type):
+        raise ValueError("%s is not a type" % annotatorType)
+    
+    def annotate(*annotationArgs, **annotationKwds):
+        def annotation(func):
+            annos = None
+            if not hasattr(func, ANNOTATION_FIELD_NAME):
+                annos = {}
+                setattr(func, ANNOTATION_FIELD_NAME, annos)
+            else:
+                annos = getattr(func, ANNOTATION_FIELD_NAME)
+            if not isinstance(annos, dict):
+                raise ValueError("Annotation container %s of %s is not a dict: %s" % (ANNOTATION_FIELD_NAME, func, type(annos)))
+            lastAnnotation = None if not annotatorType in annos else annos[annotatorType]
+            annos[annotatorType] = annotatorType(func, lastAnnotation, *annotationArgs, **annotationKwds)
+            return func
+        return annotation
+    return annotate
+
+def isAnnotated(func):
+    if not hasattr(func, ANNOTATION_FIELD_NAME):
+        return False
+    else:
+        return isinstance(getattr(func, ANNOTATION_FIELD_NAME), dict)
+
+def getAnnotation(func, annotationType = None):
+    if not isAnnotated(func):
+        return None
+    
+    annos = getattr(func, ANNOTATION_FIELD_NAME)
+    if annotationType is None:
+        return annos
+    else:
+        return annos[annotationType]
+
+class AbstractAnnotator(object):
+    
+    def __init__(self, func, predefined, *args, **kwds):
+        self.func = func
+        self.predefined = predefined
+        self.args = args
+        self.keywords = kwds
+    
+    def __str__(self):
+        return u"%s(%s; %s%s)" % (self.__class__.__name__, self.args, self.keywords, u" <overrides: %s>" % self.predefined if not self.predefined is None else u"")
+    
+    def __repr__(self):
+        return self.__str__()
 
 
 if __name__ == "__main__":
@@ -84,9 +135,10 @@ if __name__ == "__main__":
         
         def __init__(self, func, *args, **kwds):
             print "func, deco args, deco kwds=", func, args, kwds
+            self.func = func
         
         def __call__(self, *args, **kwds):
-            return self._decorator_args[0](*args, **kwds)
+            return self.func(*args, **kwds)
     
     bar = ConsProxy(DecoratorDelegator)
     
@@ -104,3 +156,15 @@ if __name__ == "__main__":
     def foofoo(a, b):
         print a, b
     foofoo(1, "a")
+    
+    class FooAnnotation(AbstractAnnotator):
+        pass
+    
+    anno = ConsAnnotation(FooAnnotation)
+    @anno(1, "a", x = int, y = basestring)
+    @anno(2, "b")
+    def foo(x, y):
+        print x, y
+    print foo(1,2), isAnnotated(foo), getAnnotation(foo)
+    print foo
+    

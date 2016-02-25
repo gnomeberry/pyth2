@@ -57,7 +57,7 @@ class Executor(object):
                         self.__parent.unhandledExceptionHandler(self, currentTask)
                 self.__parent._detatchThread(self)
 #             print "(UNASSOCIATE Thread %s)" % id(self)
-            self.__parent._unassociateThread(self)
+            self.__parent._purgeThread(self)
     
     def __init__(self, daemonize = True, poolMaxSize = None, unhandledExceptionHandler = None):
         if not poolMaxSize is None and int(poolMaxSize) <= 0:
@@ -82,10 +82,11 @@ class Executor(object):
             self.__pool.add(wrappedThread)
             self.__poolCondition.notifyAll()
     
-    def _unassociateThread(self, wrappedThread):
+    def _purgeThread(self, wrappedThread):
         with self.__poolCondition:
             self.__pool.remove(wrappedThread)
             self.__poolCondition.notifyAll()
+            self.__creationTime -= 1
     
     def _takeThread(self):
         with self.__poolCondition:
@@ -203,18 +204,19 @@ class Future(object):
             return self.__result, self.__excInfo
 
 if __name__ == "__main__":
-    ex = Executor(True, 2)
+    ex = Executor(True, 5)
     def heavyTask(taskId):
-        n = random.randint(300, 1000)
+        n = random.randint(10, 1000)
         print "(TASK %2d await %s msec)" % (taskId, n)
         time.sleep(n / 1000.0)
         print "(TASK %2d exit)" % taskId
         return taskId
-    futures = [ex.submit(heavyTask, i) for i in xrange(10)]
+    futures = [ex.submit(heavyTask, i) for i in xrange(20)]
     terms = []
     for f in futures:
         terms.append(f.get())
         print terms
+    print "TERMINATED, waiting"
     time.sleep(THREAD_LIFETIME + 1)
     t = Task(lambda a, b: a / b, 1, 0)
     print t()
