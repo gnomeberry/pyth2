@@ -402,4 +402,4 @@ if __name__ == "__main__":
         print "%f/%f = %f" % (a, b, c)
         return c
     t = Task(fooTask, 3, 2).then(fooTask, 2).then(fooTask, 1).then(fooTask, 0)
-    print t.get()
+    print t.getSafe()
