@@ -78,9 +78,9 @@ class MemoizeInvocator(object):
         if not memo:
             # miss cache
             try:
-                result = self.func(*args, **kwds)
-                self._addMemo(argTuple, result, None)
-                return result
+                getSafe = self.func(*args, **kwds)
+                self._addMemo(argTuple, getSafe, None)
+                return getSafe
             except:
                 exc_type, exc_value, exc_trace = sys.exc_info()
                 self._addMemo(argTuple, None, (exc_type, exc_value, exc_trace))

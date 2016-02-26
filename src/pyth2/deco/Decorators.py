@@ -77,11 +77,30 @@ def ConsTranslator(translator):
     
     return decorate
 
+# field name for annotations
 ANNOTATION_FIELD_NAME = "_annotations"
-def ConsAnnotation(annotatorType):
+
+def ConsAnnotator(annotationType):
+    """
+    Constructs annotations.
+    Annotations are not like Decorators. The annotation does not modify original function, but it only appends 'annotation'.
     
-    if not isinstance(annotatorType, type):
-        raise ValueError("%s is not a type" % annotatorType)
+    ex)
+    class SomeAnnotation(AbstractAnnotation): pass
+    some_annotation = ConsAnnotator(SomeAnnotation)
+    @some_annotation(a = 1, b = 2) # outer one. "inner" annotation might be shadowed by the outer
+    @some_annotation(x = "a", y = "b") # inner annotation
+    def func(*args):
+        print getAnnotation(func) # outputs whole annotations which is attached to "func"(i.e self) object
+        print getAnnotation(func, SomeAnnotation) # annotations for "func" object is accessible because it is not modified by "some_annotation".
+        print getAnnotation(func, object) # annotation type "object" is not attached to "func" object. Outputs None.
+        print args
+    
+    @param annotationType: annotation type
+    @return: an annotation decorator
+    """
+    if not isinstance(annotationType, type):
+        raise ValueError("%s is not a type" % annotationType)
     
     def annotate(*annotationArgs, **annotationKwds):
         def annotation(func):
@@ -93,17 +112,24 @@ def ConsAnnotation(annotatorType):
                 annos = getattr(func, ANNOTATION_FIELD_NAME)
             if not isinstance(annos, dict):
                 raise ValueError("Annotation container %s of %s is not a dict: %s" % (ANNOTATION_FIELD_NAME, func, type(annos)))
-            lastAnnotation = None if not annotatorType in annos else annos[annotatorType]
-            annos[annotatorType] = annotatorType(func, lastAnnotation, *annotationArgs, **annotationKwds)
+            lastAnnotation = None if not annotationType in annos else annos[annotationType]
+            annos[annotationType] = annotationType(func, lastAnnotation, *annotationArgs, **annotationKwds)
             return func
         return annotation
     return annotate
 
-def isAnnotated(func):
+def isAnnotated(func, annotationType = None):
+    """
+    
+    """
     if not hasattr(func, ANNOTATION_FIELD_NAME):
         return False
     else:
-        return isinstance(getattr(func, ANNOTATION_FIELD_NAME), dict)
+        annos = getattr(func, ANNOTATION_FIELD_NAME)
+        if not isinstance(annos, dict):
+            return False
+        else:
+            return True if annotationType else annotationType in annos 
 
 def getAnnotation(func, annotationType = None):
     if not isAnnotated(func):
@@ -115,13 +141,19 @@ def getAnnotation(func, annotationType = None):
     else:
         return annos[annotationType]
 
-class AbstractAnnotator(object):
+class AbstractAnnotation(object):
     
     def __init__(self, func, predefined, *args, **kwds):
         self.func = func
         self.predefined = predefined
         self.args = args
         self.keywords = kwds
+    
+    def __iter__(self):
+        cur = self
+        while cur:
+            yield cur
+            cur = cur.predefined
     
     def __str__(self):
         return u"%s(%s; %s%s)" % (self.__class__.__name__, self.args, self.keywords, u" <overrides: %s>" % self.predefined if not self.predefined is None else u"")
@@ -157,13 +189,15 @@ if __name__ == "__main__":
         print a, b
     foofoo(1, "a")
     
-    class FooAnnotation(AbstractAnnotator):
+    class FooAnnotation(AbstractAnnotation):
         pass
     
-    anno = ConsAnnotation(FooAnnotation)
+    anno = ConsAnnotator(FooAnnotation)
     @anno(1, "a", x = int, y = basestring)
     @anno(2, "b")
     def foo(x, y):
+        for a in getAnnotation(foo, FooAnnotation):
+            print a.keywords, a
         print x, y
     print foo(1,2), isAnnotated(foo), getAnnotation(foo)
     print foo

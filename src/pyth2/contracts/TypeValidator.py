@@ -286,18 +286,18 @@ def validateAfter(func, validator=None):
     Function wrapper for post-invocation-validation
      
     @param func: a target function
-    @param validator: default=None, checks result and returns the result(may be transformed) is the value if this is None or not-function type, or invokes the value with 'result' if this is a function
+    @param validator: default=None, checks getSafe and returns the getSafe(may be transformed) is the value if this is None or not-function type, or invokes the value with 'getSafe' if this is a function
     @return: a wrapped function 
     '''
      
     @wraps(func)
     def wrapped(*Args, **kwArgs):
-        result = func(*Args, **kwArgs)
-        if validator is None and result is not None:
-            raise ValidationException("result=%s expect=None")
+        getSafe = func(*Args, **kwArgs)
+        if validator is None and getSafe is not None:
+            raise ValidationException("getSafe=%s expect=None")
         elif isinstance(validator, types.FunctionType):
-            result = validator(func, result, *Args, **kwArgs)
-        return result
+            getSafe = validator(func, getSafe, *Args, **kwArgs)
+        return getSafe
      
     return inheritOriginalArgSpec(wrapped, func)
 
@@ -309,8 +309,8 @@ def returns(*resultType):
     '''
     resultType = toTypeValidator(resultType) if not isinstance(resultType, TypeValidator) else resultType
     
-    def _resultIs(targetFunction, result, *args, **kwargs): # @UnusedVariable
-        return resultType.validate(result)
+    def _resultIs(targetFunction, getSafe, *args, **kwargs): # @UnusedVariable
+        return resultType.validate(getSafe)
 
     def adapter(func):
         @wraps(func)
