@@ -11,7 +11,7 @@ from setuptools import find_packages
 
 setup(
     name = "pyth2",
-    version = "0.0.1",
+    version = "0.0.2",
     description = "Python Utilities",
     author = "_",
     author_email = "_@_.jp",

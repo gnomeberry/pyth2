@@ -4,7 +4,7 @@ Created on 2016/02/23
 
 @author: _
 '''
-import types
+import operator
 
 
 class IterableExtension(object):
@@ -172,13 +172,11 @@ class EachableGenerator(IterableExtension):
         
         Should promote to float when necessary.
         """
-        other = float(other)
-        return EachableGenerator(elm / other for elm in self.gen)
+        return EachableGenerator(operator.truediv(elm, other) for elm in self.gen)
     
     def __rtruediv__(self, other):
         """other / self with __future__ division"""
-        other = float(other)
-        return EachableGenerator(other / elm for elm in self.gen)
+        return EachableGenerator(operator.truediv(other, elm) for elm in self.gen)
     
     def __pow__(self, exponent):
         """self**exponent; should promote to float or complex when necessary."""
@@ -264,4 +262,4 @@ if __name__ == "__main__":
         return 0
     g = List(range(22))
     print g
-    print g.select(lambda x: executor.submit(lambda: hanoi(x, "A", "B", "C"))).select(lambda future: future.getSafe()).toList
+    print g.select(lambda x: executor.submit(lambda: hanoi(x, "A", "B", "C"))).each.getSafe().toList
