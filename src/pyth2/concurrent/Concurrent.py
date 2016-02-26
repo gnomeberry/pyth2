@@ -75,15 +75,14 @@ class Executor(object):
 #             print "(UNASSOCIATE Thread %s)" % id(self)
             self.__parent._purgeThread(self)
     
-    def __init__(self, daemonize = True, poolMaxSize = None, unhandledExceptionHandler = None, taskType = None, futureType = None):
+    def __init__(self, daemonize = True, poolMaxSize = None, unhandledExceptionHandler = None, taskType = None):
         """
         Initializer
         
         @param daemonize: all threads are daemon thread if True 
         @param poolMaxSize: maximum number of threads are spawn if the argument is natural(more than 1 integral) number, or number of demand threads are spawn if None
         @param unhandledExceptionHandler: a function which is invoked at a unhandled exception has occurred(forms like (lambda worker_thread, task: ..)), or exception are ignored if None
-        @param taskTypeparam:
-        @param futureType:  
+        @param taskType: subtype of Task which is used for creation of new Task
         """
         if not poolMaxSize is None and int(poolMaxSize) <= 0:
             raise ValueError("Pool max size must be more than 0")
@@ -98,7 +97,6 @@ class Executor(object):
         
         self.unhandledExceptionHandler = unhandledExceptionHandler
         self.taskType = taskType if isinstance(taskType, Task) else Task
-        self.futureType = futureType if isinstance(futureType, Future) else Future
         
         self.__worker = threading.Thread(target = self.__acception)
         self.__worker.daemon = True
@@ -152,13 +150,14 @@ class Executor(object):
         """
         Submits a new task into the Executor
         
-        @param someCallable: callable object to be wrapped into Task object
+        @param someCallable: callable object to be wrapped into Task object or subtype of self.taskType object
         @param args: positional arguments for the callable object
         @param kwds: keyword arguments for the callable object
+        @return: new Future object
         """
 #         print "(SUBMITTED %s)" % args
-        task = self.taskType(someCallable, *args, **kwds)
-        future = self.futureType(task)
+        task = self.taskType(someCallable, *args, **kwds) if not isinstance(someCallable, self.taskType) else someCallable
+        future = Future(task)
         task._setFuture(future)
         self.__submitted.put(task)
         return future
