@@ -5,6 +5,7 @@ Created on 2016/01/27
 '''
 
 import functools
+import types
 
 
 def getOriginalDecoratee(decorated):
@@ -78,7 +79,9 @@ def ConsTranslator(translator):
     return decorate
 
 # field name for annotations
-ANNOTATION_FIELD_NAME = "_annotations"
+ANNOTATION_FIELD_NAME = "__annotations"
+ANNOTATION_GETTER_NAME = "_getAnnotation"
+ANNOTATION_HAS_NAME = "_hasAnnotation"
 
 def ConsAnnotator(annotationType):
     """
@@ -103,18 +106,20 @@ def ConsAnnotator(annotationType):
         raise ValueError("%s is not a type" % annotationType)
     
     def annotate(*annotationArgs, **annotationKwds):
-        def annotation(func):
+        def annotation(annotatee):
             annos = None
-            if not hasattr(func, ANNOTATION_FIELD_NAME):
+            if not hasattr(annotatee, ANNOTATION_FIELD_NAME):
                 annos = {}
-                setattr(func, ANNOTATION_FIELD_NAME, annos)
+                setattr(annotatee, ANNOTATION_FIELD_NAME, annos)
+                setattr(annotatee, ANNOTATION_GETTER_NAME, types.MethodType(lambda self, name: getAnnotation(self, name), annotatee, type(annotatee)))
+                setattr(annotatee, ANNOTATION_HAS_NAME, types.MethodType(lambda self, name: isAnnotated(self, name), annotatee, type(annotatee)))
             else:
-                annos = getattr(func, ANNOTATION_FIELD_NAME)
+                annos = getattr(annotatee, ANNOTATION_FIELD_NAME)
             if not isinstance(annos, dict):
-                raise ValueError("Annotation container %s of %s is not a dict: %s" % (ANNOTATION_FIELD_NAME, func, type(annos)))
+                raise ValueError("Annotation container %s of %s is not a dict: %s" % (ANNOTATION_FIELD_NAME, annotatee, type(annos)))
             lastAnnotation = None if not annotationType in annos else annos[annotationType]
-            annos[annotationType] = annotationType(func, lastAnnotation, *annotationArgs, **annotationKwds)
-            return func
+            annos[annotationType] = annotationType(annotatee, lastAnnotation, *annotationArgs, **annotationKwds)
+            return annotatee
         return annotation
     return annotate
 
@@ -129,7 +134,7 @@ def isAnnotated(func, annotationType = None):
         if not isinstance(annos, dict):
             return False
         else:
-            return True if annotationType else annotationType in annos 
+            return True if annotationType is None else annotationType in annos 
 
 def getAnnotation(func, annotationType = None):
     if not isAnnotated(func):
@@ -197,8 +202,10 @@ if __name__ == "__main__":
     @anno(2, "b")
     def foo(x, y):
         for a in getAnnotation(foo, FooAnnotation):
-            print a.keywords, a
+            print "foo.annotations=", a.args, a.keywords
         print x, y
-    print foo(1,2), isAnnotated(foo), getAnnotation(foo)
-    print foo
+    print foo, getAnnotation(foo), isAnnotated(foo)
+    print foo._getAnnotation(None)
+    print foo._hasAnnotation(None)
+    foo(1,2)
     

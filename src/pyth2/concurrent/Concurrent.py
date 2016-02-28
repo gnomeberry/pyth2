@@ -5,22 +5,28 @@ Created on 2016/02/25
 @author: _
 '''
 
-from pyth2.enum.SafeEnum import enumOf
-import threading
-import weakref
-import sys
-import random
-import time
 import Queue
+import random
+import sys
+import threading
+import time
+import weakref
+from pyth2.enum.SafeEnum import enumOf
 
-
-TASK_STATUS = enumOf(int, "TaskStatus",
-    WAITING = 0,
-    RUNNING = 1,
-#     CANCELLED = 2,
-    COMPLETE = 3)
 
 WORKER_THREAD_LIFETIME = 3 # seconds
+
+THREAD_SIGNAL_TRACE_ENABLED = True # True if threading.settrace hack is enabled
+
+CANNCELLABLE = enumOf(int, "Cancellable",
+    INTERRUPTABLE = 0,
+    GENERATIVE_INTERRUPTABLE = 1,
+    FLAG_INTERRUPTABLE = 2,
+    NOT_INTERRUPTABLE = 3
+    )
+
+class ExecutorThreadInterrupt(Exception):
+    pass
 
 class TaskError(Exception):
     pass
@@ -58,12 +64,17 @@ class Executor(object):
             self.__exitLoop = True
         
         def run(self):
+            if THREAD_SIGNAL_TRACE_ENABLED:
+                sys.settrace(lambda frame, event, arg: None)
             while not self.__exitLoop:
                 try:
                     currentTask = self.__taskQueue.get(True, timeout = WORKER_THREAD_LIFETIME)
                     self.currentTask = None
 #                     print "(EXECUTE %s, %s)" % (currentTask.args, id(self))
                     currentTask()
+                except ExecutorThreadInterrupt:
+                    # Thread is interrupted
+                    break
                 except Queue.Empty:
                     # Cannot obtain next task
                     break
@@ -74,6 +85,28 @@ class Executor(object):
                 self.__parent._detachThread(self)
 #             print "(UNASSOCIATE Thread %s)" % id(self)
             self.__parent._purgeThread(self)
+        
+        def _interrupt(self, executorThreadInterruptInstance = ExecutorThreadInterrupt()):
+            if not isinstance(executorThreadInterruptInstance, ExecutorThreadInterrupt):
+                raise ValueError("%s is not an instance of %s" % (executorThreadInterruptInstance, ExecutorThreadInterrupt))
+            
+            def raiseInterruptor():
+                raise executorThreadInterruptInstance
+            
+            targetFrame = None
+            for threadId, frame in sys._current_frames().viewitems():
+                if threadId == self.ident:
+                    targetFrame = frame
+                    break
+            else:
+                raise ValueError("Cannot identify self thread frame: %d" % self.ident)
+            while targetFrame:
+                if targetFrame.f_trace is None:
+                    targetFrame.f_trace = raiseInterruptor
+                targetFrame = targetFrame.f_back
+            del targetFrame
+                        
+                
     
     def __init__(self, daemonize = True, poolMaxSize = None, unhandledExceptionHandler = None, taskType = None):
         """
@@ -222,6 +255,12 @@ class Task(object):
             while self.__resultPair is None:
                 self.__completeCondition.wait(timeout)
     
+    def cancel(self, cancellationType = ExecutorThreadInterrupt()):
+        t = threading.currentThread()
+        if not hasattr(t, "_interrupt"):
+            raise ValueError("Cannot interrupt")
+        t._interrupt(cancellationType)
+    
     def getSafe(self):
         """
         Returns task results in the form of a pair of (task result, exc_info)
@@ -342,9 +381,9 @@ class Future(object):
         with self.__completedCondition:
             return self.__completed
     
-    def cancel(self):
+    def cancel(self, cancellationType = ExecutorThreadInterrupt()):
         # TODO
-        pass
+        self.__task.cancel(cancellationType)
     
     def getSafe(self, timeout = None):
         """
@@ -403,3 +442,14 @@ if __name__ == "__main__":
         return c
     t = Task(fooTask, 3, 2).then(fooTask, 2).then(fooTask, 1).then(fooTask, 0)
     print t.getSafe()
+    
+    def infTask():
+        c = threading.Condition()
+        with c:
+            print "Awaiting"
+            c.wait()
+    f = ex.submit(infTask)
+    print f.get(0.5)
+    f.cancel()
+    print f.get()
+            

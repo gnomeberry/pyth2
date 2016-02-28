@@ -5,6 +5,7 @@ Created on 2016/02/23
 @author: _
 '''
 import operator
+import time
 
 
 class IterableExtension(object):
@@ -254,12 +255,16 @@ if __name__ == "__main__":
     print "".join(f.select(lambda x: List(x)).flatMap(lambda x: x.upper()).toList)
     
     from pyth2.concurrent import Concurrent
-    executor = Concurrent.Executor(True, 10)
+    executor = Concurrent.Executor(True, 20)
     def hanoi(n, start, end, work):
         if n > 0:
             k = hanoi(n - 1, start, work, end)
             return hanoi(n - 1, work, end, start) + k + 1
         return 0
-    g = List(range(22))
+    g = List(range(30, 0, -1))
     print g
-    print g.select(lambda x: executor.submit(lambda: hanoi(x, "A", "B", "C"))).each.getSafe().toList
+    def hanoiMachine():
+        t = time.time()
+        print g.select(lambda x: executor.submit(lambda: hanoi(x, "A", "B", "C"))).each.getSafe().toList
+        return time.time() - t
+    print hanoiMachine()
