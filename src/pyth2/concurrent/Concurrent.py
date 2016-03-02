@@ -11,19 +11,11 @@ import sys
 import threading
 import time
 import weakref
-from pyth2.enum.SafeEnum import enumOf
 
 
 WORKER_THREAD_LIFETIME = 3 # seconds
 
 THREAD_SIGNAL_TRACE_ENABLED = True # True if threading.settrace hack is enabled
-
-CANNCELLABLE = enumOf(int, "Cancellable",
-    INTERRUPTABLE = 0,
-    GENERATIVE_INTERRUPTABLE = 1,
-    FLAG_INTERRUPTABLE = 2,
-    NOT_INTERRUPTABLE = 3
-    )
 
 class ExecutorThreadInterrupt(Exception):
     pass
@@ -33,6 +25,64 @@ class TaskError(Exception):
 
 class FutureError(Exception):
     pass
+
+class CancellationTokenSource(object):
+    """
+    (Like .net framework's class System.Threading.CancellationTokenSource) This class represents a 'Cancellation' for task.
+    """
+    class CancellationToken(object):
+        """
+        A token object which used to check cancelled or not.
+        """
+        def __init__(self, parent):
+            """
+            Initializer
+            
+            @param parent: A corresponding CancellationTokenSource object
+            """
+            self.__parent = parent
+        
+        @property
+        def isCancelled(self):
+            """
+            Returns the corresponding CancellationTokenSource object's isCancelled property.
+            This method may be blocking.
+            """
+            return self.__parent.isCancelled()
+    
+    def __init__(self):
+        """
+        Initialize
+        """
+        self.__condition = threading.RLock()
+        self.__cancelled = False
+    
+    def newToken(self):
+        """
+        Takes new CancellationToken object
+        
+        @return: new CancellationToken object which is associated to this
+        """
+        return self.CancellationToken(self.__condition)
+    
+    @property
+    def isCancelled(self):
+        """
+        Returns True if and only if this CancellationTokenSource had been 'Cancelled'.
+        
+        @return: True if had been cancelled
+        """
+        with self.__condition:
+            return self.__cancelled
+            
+    def cancel(self):
+        """
+        Mark this CancellationTokenSource object to 'Cancelled'.
+        This method may be blocking.
+        This method is executed atomically.
+        """
+        with self.__condition:
+            self.__cancelled = True
 
 class Executor(object):
     """
@@ -381,9 +431,13 @@ class Future(object):
         with self.__completedCondition:
             return self.__completed
     
-    def cancel(self, cancellationType = ExecutorThreadInterrupt()):
+    def cancel(self, timeoutForCancel = None, cancellationType = ExecutorThreadInterrupt()):
         # TODO
         self.__task.cancel(cancellationType)
+        if not timeoutForCancel is None:
+            with self.__completedCondition:
+                while not self.__completed:
+                    self.__completedCondition.wait(timeoutForCancel)
     
     def getSafe(self, timeout = None):
         """
