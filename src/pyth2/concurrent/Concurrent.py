@@ -11,11 +11,16 @@ import sys
 import threading
 import time
 import weakref
+import types
 
 
 WORKER_THREAD_LIFETIME = 3 # seconds
 
 THREAD_SIGNAL_TRACE_ENABLED = True # True if threading.settrace hack is enabled
+
+_UNUSED_QUEUE_EMPTY = Queue.Empty # Sometimes the reference to Queue.Empty is releases on process termination.
+
+ERASE_UNHANDLED_TASK_EXCEPTION_FRAME_LOCALS = False
 
 class ExecutorThreadInterrupt(Exception):
     pass
@@ -125,7 +130,7 @@ class Executor(object):
                 except ExecutorThreadInterrupt:
                     # Thread is interrupted
                     break
-                except Queue.Empty:
+                except _UNUSED_QUEUE_EMPTY:
                     # Cannot obtain next task
                     break
                 except:
@@ -383,7 +388,14 @@ class Task(object):
                         partialResult = thenParam[0](partialResult, *thenParam[1], **thenParam[2])
                 self.__resultPair = (partialResult, None)
             except:
-                self.__resultPair = (None, sys.exc_info())
+                excInfo = sys.exc_info()
+                if ERASE_UNHANDLED_TASK_EXCEPTION_FRAME_LOCALS:
+                    currentExcInfo = excInfo.tb_next # top frame is here, 2nd frame is function body
+                    while currentExcInfo:
+                        frame = currentExcInfo.tb_frame
+                        frame.f_locals.clear()
+                        currentExcInfo = currentExcInfo.tb_next
+                self.__resultPair = (None, excInfo)
                 sys.exc_clear()
             
             self.__completeCondition.notifyAll()
@@ -391,6 +403,46 @@ class Task(object):
             if maybeRef:
                 maybeRef._markCompleted()
             return self.__resultPair
+
+class CancellableTask(Task):
+    """
+    This Task class is an basic concept which can be cancelled by CancellationTokenSource.
+    """
+    def __init__(self, func, cancellationTokenSource = None, *args, **kwds):
+        """
+        Initialize
+        
+        @param func: task body function
+        @param cancellationTokenSource: a hook for cancellation
+        """
+        super(CancellableTask, self).__init__(func, *args, **kwds)
+        self.cancellationTokenSource = cancellationTokenSource if isinstance(cancellationTokenSource, CancellationTokenSource) else CancellationTokenSource()
+    
+    def cancel(self):
+        """
+        Cancel task by corresponding CancellationTokenSource
+        """
+        self.cancellationTokenSource.cancel()
+
+class StepwiseTask(CancellableTask):
+    """
+    Task which executes continuously a generator while the generator returns True-like value.
+    """
+    
+    def __init__(self, generatorFunc, cancellationTokenSource = None, *args, **kwds):
+        """
+        Initialize
+        
+        @param generatorFunc: a generator function. The function is executed continuously if the generator returns True-like value.
+        @param cancellationTokenSource: a hook for cancellation
+        """
+        super(StepwiseTask, self).__init__(generatorFunc, cancellationTokenSource, *args, **kwds)
+        self.then(self.__stepwise__)
+    
+    def __stepwise__(self, gen):
+        for elm in gen:
+            if not elm or self.cancellationTokenSource.isCancelled:
+                return
 
 class Future(object):
     """
@@ -470,6 +522,9 @@ class Future(object):
             raise exc_info[0], exc_info[1], exc_info[2]
         else:
             return result
+    
+    def __call__(self, timeout = None):
+        return self.get(timeout)
 
 if __name__ == "__main__":
     ex = Executor(True, 10)
@@ -497,6 +552,15 @@ if __name__ == "__main__":
     t = Task(fooTask, 3, 2).then(fooTask, 2).then(fooTask, 1).then(fooTask, 0)
     print t.getSafe()
     
+    def yieldFunc():
+        for x in xrange(10):
+            print "x=%d" % x
+            yield True
+        print "end"
+    
+    f = ex.submit(StepwiseTask(yieldFunc))
+    print f()
+    
     def infTask():
         c = threading.Condition()
         with c:
@@ -506,4 +570,5 @@ if __name__ == "__main__":
     print f.get(0.5)
     f.cancel()
     print f.get()
-            
+    
+

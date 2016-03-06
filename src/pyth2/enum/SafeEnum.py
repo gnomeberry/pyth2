@@ -32,7 +32,7 @@ def _enum_add_(selv, other):
 def enumOf(baseType = int, enumName = "", **kwArgs):
     '''
     Defines an anonymous class of Enum.
-    Enumerated value can be access by attribute.<br/>
+    Enumerated __value can be access by attribute.<br/>
     <pre>
     ex.)
     weekday = enumOf(SUNDAY = 1, MONDAY = 2, TUESDAY = 3, WEDENSDAY = 4, THURSDAY = 5, FRIDAY = 6, SATURDAY = 7)
@@ -58,7 +58,7 @@ def enumOf(baseType = int, enumName = "", **kwArgs):
     order = 0
     for elementName, value in kwArgs.items():
         if not isinstance(value, baseType):
-            raise ValueError("name=%s value=%s is not applicable for enum of %s" % tv.toStrTuple(elementName, value, baseType))
+            raise ValueError("name=%s __value=%s is not applicable for enum of %s" % tv.toStrTuple(elementName, value, baseType))
         if hasattr(enumType, elementName):
             raise ValueError("name=%s is already defined" % elementName)
             
@@ -73,7 +73,7 @@ def enumOf(baseType = int, enumName = "", **kwArgs):
         enumValue.enumName = elementName
         enumValue.__eq__ = lambda self, other: isinstance(other, enumType) and other.order == order
         enumValue.__ne__ = lambda self, other: not self.__eq__(other)
-        enumValue.value = value
+        enumValue.__value = value
         enumValue.baseType = enumType
         enumValue.order = order
         enumType.values.append(enumValue)

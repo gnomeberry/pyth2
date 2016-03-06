@@ -148,8 +148,8 @@ def getAnnotation(func, annotationType = None):
 
 class AbstractAnnotation(object):
     
-    def __init__(self, func, predefined, *args, **kwds):
-        self.func = func
+    def __init__(self, generatorFunc, predefined, *args, **kwds):
+        self.func = generatorFunc
         self.predefined = predefined
         self.args = args
         self.keywords = kwds
@@ -170,9 +170,9 @@ class AbstractAnnotation(object):
 if __name__ == "__main__":
     class DecoratorDelegator(object):
         
-        def __init__(self, func, *args, **kwds):
-            print "func, deco args, deco kwds=", func, args, kwds
-            self.func = func
+        def __init__(self, generatorFunc, *args, **kwds):
+            print "generatorFunc, deco args, deco kwds=", generatorFunc, args, kwds
+            self.func = generatorFunc
         
         def __call__(self, *args, **kwds):
             return self.func(*args, **kwds)

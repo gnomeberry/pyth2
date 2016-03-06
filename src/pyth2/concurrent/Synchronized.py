@@ -12,8 +12,8 @@ from pyth2.deco.Decorators import ConsProxy
 
 class SynchronizedInvocator(object):
     
-    def __init__(self, func, condition = None):
-        self.__func = func
+    def __init__(self, generatorFunc, condition = None):
+        self.__func = generatorFunc
         self.__lock = threading.Condition() if not isinstance(condition, threading.Condition) else condition
     
     @property
