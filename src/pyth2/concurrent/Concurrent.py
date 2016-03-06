@@ -11,7 +11,6 @@ import sys
 import threading
 import time
 import weakref
-import types
 
 
 WORKER_THREAD_LIFETIME = 3 # seconds

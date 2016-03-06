@@ -6,7 +6,6 @@ Created on 2016/03/06
 import time
 
 from pyth2.concurrent.Concurrent import StepwiseTask, Executor
-from pyth2.deco.Decorators import ConsProxy
 
 
 class Timer(object):
@@ -42,7 +41,7 @@ class ContinuousTimer(StepwiseTask):
         return self.__handler
     
     @handler.setter
-    def __set_handler(self, handler):
+    def handler(self, handler):
         if not callable(handler):
             raise ValueError("%s is not a callable object" % handler)
         self.__handler = handler
