@@ -15,7 +15,7 @@ class MemoizeInvocator(object):
     Proxy for memoize decorator
     '''
     maximumMemoSize = None
-    func = None
+    annotatee = None
     __memo = dict()
     
     @staticmethod
@@ -39,15 +39,15 @@ class MemoizeInvocator(object):
         '''
         Setup function
         
-        @param func: a function
+        @param annotatee: a function
         @param memoSize: maximum memo size, or None for unlimited memo
         @param compaction: a function(timestamp: double, argTuple: a, argTuple: b) to select a removable memo when memo size is reached to maximum memo size, or None selects a oldest memo
         '''
         self.maximumMemoSize = None if memoSize is None else max((1, int(memoSize)))
         self.compaction = compaction if callable(compaction) else lambda maxMemoSize, index, item: item[0]
-        self.func = func
-        self.func._argTuple = MemoizeInvocator._argTuple_Freezed
-        self.func._argTupleFailed = False 
+        self.annotatee = func
+        self.annotatee._argTuple = MemoizeInvocator._argTuple_Freezed
+        self.annotatee._argTupleFailed = False 
     
     def _addMemo(self, argTuple, results, errors):
         self.__memo[argTuple] = [time() * 10000, results, errors]
@@ -65,20 +65,20 @@ class MemoizeInvocator(object):
         self.__memo[argTuple][0] = time() * 10000
     
     def __call__(self, *args, **kwds):
-        if not self.func._argTupleFailed:
+        if not self.annotatee._argTupleFailed:
             try:
-                argTuple = self.func._argTuple(args, kwds)
+                argTuple = self.annotatee._argTuple(args, kwds)
             except:
-                self.func._argTupleFailed = True
-                self.func._argTuple = MemoizeInvocator._argTuple_Serialized
-                argTuple = self.func._argTuple(args, kwds)
+                self.annotatee._argTupleFailed = True
+                self.annotatee._argTuple = MemoizeInvocator._argTuple_Serialized
+                argTuple = self.annotatee._argTuple(args, kwds)
         else:
-            argTuple = self.func._argTuple(args, kwds)                                                                                                                                 
+            argTuple = self.annotatee._argTuple(args, kwds)                                                                                                                                 
         memo = self._findMemo(argTuple)
         if not memo:
             # miss cache
             try:
-                getSafe = self.func(*args, **kwds)
+                getSafe = self.annotatee(*args, **kwds)
                 self._addMemo(argTuple, getSafe, None)
                 return getSafe
             except:

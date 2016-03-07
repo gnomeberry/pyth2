@@ -21,16 +21,16 @@ class InvocableArgumentAccessor(object):
     _paramNames = [] # list<string>
     _paramIndex = {} # map<string, int>
     
-    def __init__(self, generatorFunc):
+    def __init__(self, annotatee):
         '''
         Initiaize
         
-        @param generatorFunc: a target function
+        @param annotatee: a target function
         '''
-        if not isinstance(generatorFunc, types.FunctionType):
-            raise ValueError("%s is not FunctionType" % str(generatorFunc))
-        self._func = generatorFunc
-        self._argSpec = inspect.getargspec(generatorFunc) if not hasattr(generatorFunc, ORIGINAL_ARGSPEC_ATTRIBUTE) else generatorFunc.__originArgSpec__
+        if not isinstance(annotatee, types.FunctionType):
+            raise ValueError("%s is not FunctionType" % str(annotatee))
+        self._func = annotatee
+        self._argSpec = inspect.getargspec(annotatee) if not hasattr(annotatee, ORIGINAL_ARGSPEC_ATTRIBUTE) else annotatee.__originArgSpec__
         self._paramNames = self._argSpec.args
         self._paramIndex = {para: index for para, index in zip(self._paramNames, range(len(self._paramNames)))}
         

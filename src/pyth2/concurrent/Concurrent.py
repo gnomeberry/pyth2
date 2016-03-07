@@ -428,14 +428,14 @@ class StepwiseTask(CancellableTask):
     Task which executes continuously a generator while the generator returns True-like value.
     """
     
-    def __init__(self, generatorFunc, cancellationTokenSource = None, *args, **kwds):
+    def __init__(self, annotatee, cancellationTokenSource = None, *args, **kwds):
         """
         Initialize
         
-        @param generatorFunc: a generator function. The function is executed continuously if the generator returns True-like value.
+        @param annotatee: a generator function. The function is executed continuously if the generator returns True-like value.
         @param cancellationTokenSource: a hook for cancellation
         """
-        super(StepwiseTask, self).__init__(generatorFunc, cancellationTokenSource, *args, **kwds)
+        super(StepwiseTask, self).__init__(annotatee, cancellationTokenSource, *args, **kwds)
         self.then(self.__stepwise__)
     
     def __stepwise__(self, gen):

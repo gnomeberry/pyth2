@@ -11,11 +11,11 @@ DEFAULT_EXECUTOR = Concurrent.Executor(True, None)
 
 class AsyncProxy(object):
     
-    def __init__(self, generatorFunc, group = None):
+    def __init__(self, annotatee, group = None):
         group = group if not group is None else DEFAULT_EXECUTOR
         if not isinstance(group, Concurrent.Executor):
             raise ValueError("%s is not Executor" % group)
-        self.__func = generatorFunc
+        self.__func = annotatee
         self.__group = group
     
     def __call__(self, *args, **kwds):
