@@ -9,6 +9,7 @@ import math
 import re
 import cStringIO
 import csv
+import types
 
 
 class ValueEstimator(object):
@@ -46,6 +47,34 @@ class ValueEstimator(object):
         @raise: 対象の文字列を受け入れられない場合
         '''
         raise ValueError("Cannot accept")
+    
+    @property
+    def parser(self):
+        """
+        この検証するものが受理する文字列を受け取って値を返す関数を得る.
+        得られた関数は次の操作を行うべき.
+        <pre>
+        def parser(s):
+            return <parsed value> if <check s is valid string for this class> else None
+        </pre>
+        
+        @return: 文字列を受け取って値を返す関数
+        """
+        raise NotImplemented
+    
+    @property
+    def presenter(self):
+        """
+        値を受け取ってこの検証するものが受理する文字列を返す関数を得る.
+        得られた関数は次の操作を行うべき.
+        <pre>
+        def presenter(v):
+            return str(v) if <v is valid value for this class> else None
+        </pre>
+        
+        @return: 値を受け取って文字列を返す関数
+        """
+        raise NotImplemented
     
     def __str__(self):
         return "%s" % self.__class__.__name__
@@ -102,6 +131,14 @@ class StringEstimator(ValueEstimator):
     
     def _checkImpl(self, strValue):
         return True
+    
+    @property
+    def parser(self):
+        return lambda s: str(s) if self.check(s) else None
+    
+    @property
+    def presenter(self):
+        return lambda v: None if v is None else str(v)
 
 class UnicodeEstimator(ValueEstimator):
     '''
@@ -121,6 +158,14 @@ class UnicodeEstimator(ValueEstimator):
     def _checkImpl(self, strValue):
         unicode(strValue, self.strEncode)
         return True
+    
+    @property
+    def parser(self):
+        return lambda s: unicode(s, self.strEncode) if self.check(s) else None
+    
+    @property
+    def presenter(self):
+        return lambda v: str(v).decode(self.strEncode)
 
 class RegexEstimator(ValueEstimator):
     '''
@@ -139,6 +184,14 @@ class RegexEstimator(ValueEstimator):
     
     def _checkImpl(self, strValue):
         return self.pattern.match(strValue)
+    
+    @property
+    def parser(self):
+        return lambda s: self.pattern.match(s) if self.check(s) else None
+    
+    @property
+    def presenter(self):
+        return lambda v: str(v)
 
 class RangedIntEstimator(ValueEstimator):
     '''
@@ -165,6 +218,14 @@ class RangedIntEstimator(ValueEstimator):
         
     def _checkImpl(self, strValue):
         return self.minInt <= int(strValue) <= self.maxInt
+    
+    @property
+    def parser(self):
+        return lambda s: int(s) if self.check(s) else None
+    
+    @property
+    def presenter(self):
+        return lambda v: str(v) if isinstance(v, types.IntType) else None
 
 class SignedBitwidthIntEstimator(RangedIntEstimator):
     """
@@ -237,6 +298,14 @@ class FloatClassEstimator(ValueEstimator):
             return math.isinf(self.minValue)
         else:
             return self.minValue <= float(strValue) <= self.maxValue
+    
+    @property
+    def parser(self):
+        return lambda s: float(s) if self.check(s) else None
+    
+    @property
+    def presenter(self):
+        return lambda v: str(v) if isinstance(v, types.FloatType) else None
 
 class NotNaNFloatEstimator(FloatClassEstimator):
     def __init__(self, nullable):
@@ -249,17 +318,45 @@ class DatetimeClassEstimator(ValueEstimator):
         
     def _checkImpl(self, strValue):
         return datetime.strptime(strValue, self.strpFormat)
+    
+    @property
+    def parser(self):
+        return lambda s: datetime.strftime(s, self.strpFormat) if self.check(s) else None
+    
+    @property
+    def presenter(self):
+        return lambda v: v.strptime(self.strpFormat) if isinstance(v, datetime) else None
 
 class RegexDatetimeEstimator(ValueEstimator):
-    regexParts = "year month day hour minute second".split(" ")
-    def __init__(self, regex = r"(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})", regex_flags = 0, nullable = True):
+    regexDatetimeParts = "year month day hour minute second microsecond tzinfo".split(" ")
+    def __init__(self, regex = r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})$", regex_flags = 0, nullable = True):
         super(RegexDatetimeEstimator, self).__init__(nullable)
         self.regex = regex
         self._pattern = re.compile(regex, regex_flags)
+    
+    
+    @staticmethod
+    def parameterizedInitializer(parts = (("year", r"\d{4}"), ("month", r"\d{2}"), ("day", r"\d{2}"), ("hour", r"\d{2}"), ("minute", r"\d{2}"), ("second", r"\d{2}")), regex_flags = 0, nullable = True):
+        regex = "^%s$" % "".join("(?P<%s>%s)" % tuple(part) for part in parts)
+        return RegexDatetimeEstimator(regex, regex_flags, nullable)
         
     def _checkImpl(self, strValue):
         m = self._pattern.match(strValue)
         return m
+    
+    @property
+    def parser(self):
+        def _parser(s):
+            m = self._pattern.match(s)
+            if not m:
+                return None
+            md = m.groupdict()
+            return datetime(**{k: int(md[k]) for k in RegexDatetimeEstimator.regexDatetimeParts if k in md})
+        return _parser
+    
+#     @property
+#     def presenter(self):
+#         raise NotImplemented
 
 class DisjunctionEstimator(ValueEstimator):
     
@@ -322,14 +419,20 @@ class DisjunctionEstimator(ValueEstimator):
 #             
 
 if __name__ == "__main__":
-    estimators = (SInt32Estimator(False), NotNaNFloatEstimator(False))
+    estimators = (
+                  RegexDatetimeEstimator.parameterizedInitializer(nullable = False),
+                  SInt32Estimator(False),
+                  NotNaNFloatEstimator(False),
+                  StringEstimator(False))
     ecs = [
            EstimationContext(estimators), 
            EstimationContext(estimators), 
+           EstimationContext(estimators),
            EstimationContext(estimators)]
     csv_data = \
-"""1.1,20,3.1
-4,5,6"""
+"""1.1,20,3.1,20160404010101
+4,5,6,20160404010102
+7,8,c,20160404010103"""
     sio = cStringIO.StringIO(csv_data)
     r = csv.reader(sio)
     for row in r:
@@ -337,4 +440,6 @@ if __name__ == "__main__":
             e.update(c)
             print e
     print [ec.feasible for ec in ecs]
+    print ecs[3].feasible.parser("20160404010102")
+
     
