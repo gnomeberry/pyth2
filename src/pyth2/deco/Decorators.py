@@ -105,6 +105,7 @@ def ConsAnnotator(annotationType):
     if not isinstance(annotationType, type):
         raise ValueError("%s is not a type" % annotationType)
     
+    # TODO: Where am I/Context for annotating
     def annotate(*annotationArgs, **annotationKwds):
         def annotation(annotatee):
             annos = None
@@ -156,7 +157,7 @@ class AbstractAnnotation(object):
     
     @classmethod
     def isAnnotated(cls, annotatee):
-        return not getAnnotation(annotatee, cls) is None
+        return isAnnotated(annotatee, cls)
     
     @classmethod
     def getAnnotation(cls, annotatee):
@@ -215,5 +216,7 @@ if __name__ == "__main__":
     print foo, getAnnotation(foo), isAnnotated(foo)
     print foo._getAnnotation(None)
     print foo._hasAnnotation(None)
+    for x in FooAnnotation.getAnnotation(foo):
+        print ">>", x.args, x.keywords
     foo(1,2)
     

@@ -6,6 +6,7 @@ Created on 2016/03/06
 import time
 
 from pyth2.concurrent.Concurrent import StepwiseTask, Executor
+from datetime import datetime
 
 
 class Timer(object):
@@ -16,12 +17,25 @@ class ContinuousTimer(StepwiseTask):
     def __init__(self, interval, handler, *args, **kwds):
         def _gen():
             while True:
-                self.__handler(self, *args, **kwds)
+                begin = time.time()
+                if self.__enabled:
+                    self.__handler(self, *args, **kwds)
                 yield True
-                time.sleep(self.__interval)
+                await = self.__interval - (time.time() - begin)
+                if await > 0:
+                    time.sleep(await)
         super(ContinuousTimer, self).__init__(_gen)
         self.__interval = interval
         self.__handler = handler
+        self.__enabled = True
+    
+    @property
+    def enabled(self):
+        return self.__enabled
+    
+    @enabled.setter
+    def __set_enabled(self, val):
+        self.__enabled = bool(val)
     
     @property
     def interval(self):

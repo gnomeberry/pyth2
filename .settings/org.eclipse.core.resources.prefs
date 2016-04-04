@@ -1,4 +1,6 @@
 eclipse.preferences.version=1
 encoding//src/pyth2/concurrent/Concurrent.py=utf-8
+encoding//src/pyth2/csv/Reader.py=utf-8
+encoding//src/pyth2/data/TypeEstimator.py=utf-8
 encoding//src/pyth2/fs/File.py=utf-8
 encoding//src/pyth2/fs/StagingFileSystem.py=utf-8

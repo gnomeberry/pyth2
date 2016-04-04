@@ -7,6 +7,8 @@ Created on 2016/01/31
 from datetime import datetime
 import math
 import re
+import cStringIO
+import csv
 
 
 class ValueEstimator(object):
@@ -37,7 +39,7 @@ class ValueEstimator(object):
     def _checkImpl(self, strValue):
         '''
         文字列の検証を行う.
-        このメソッドを
+        このメソッドに与えられる strValueは self#check() によって非 Noneな値であることが保障されている
         
         @param strValue: 対象の文字列(self.nullableが Trueと等価な場合は Noneまたは空文字列の場合がある)
         @return: 対象の文字列を受け入れられる場合は Trueと等価な値、または受け入れられない場合は Falseと等価な値
@@ -64,11 +66,19 @@ class EstimationContext(object):
         for e in estimators:
             if not isinstance(e, ValueEstimator):
                 raise ValueError("%s is not an estimator instance" % e)
-        self.__estimators = list(estimators)    
+        self.__estimators = list(estimators) # clone    
     
     def __str__(self):
-        return "%s[%s]" % (self.__class__.__name__, ", ".join(str(self.__estimators)))
+        return "%s[%s]" % (self.__class__.__name__, self.__estimators)
     
+    @property
+    def availables(self):
+        return tuple(self.__estimators)
+    
+    @property
+    def feasible(self):
+        return self.__estimators[0] if self.__estimators else None
+            
     def update(self, strValue):
         '''
         この EstimationContextの持つ ValueEstimatorの集合に対して checkを行い、受け入れ状態を更新する
@@ -157,31 +167,52 @@ class RangedIntEstimator(ValueEstimator):
         return self.minInt <= int(strValue) <= self.maxInt
 
 class SignedBitwidthIntEstimator(RangedIntEstimator):
+    """
+    符号付整数を受け入れるもの
+    """
     def __init__(self, bitWidth, nullable):
         bitWidth -= 1
         super(SignedBitwidthIntEstimator, self).__init__(-(2 ** bitWidth), 2 ** bitWidth - 1, nullable)
 
 class UnsignedBitwidthIntEstimator(RangedIntEstimator):
+    """
+    符号なし整数を受け入れるもの
+    """
     def __init__(self, bitWidth, nullable):
         super(UnsignedBitwidthIntEstimator, self).__init__(0, 2 ** bitWidth - 1, nullable)
 
 class UInt32Estimator(UnsignedBitwidthIntEstimator):
-    def __init__(self):
-        super(UInt32Estimator, self).__init__(32)
+    """
+    32ビット整数を受け入れるもの
+    """
+    def __init__(self, nullable):
+        super(UInt32Estimator, self).__init__(32, nullable)
 
 class UInt64Estimator(UnsignedBitwidthIntEstimator):
-    def __init__(self):
-        super(UInt64Estimator, self).__init__(64)
+    """
+    64ビット整数を受け入れるもの
+    """
+    def __init__(self, nullable):
+        super(UInt64Estimator, self).__init__(64, nullable)
 
 class SInt32Estimator(SignedBitwidthIntEstimator):
-    def __init__(self):
-        super(SInt32Estimator, self).__init__(32)
+    """
+    2の補数表現の32ビット整数を受け入れるもの
+    """
+    def __init__(self, nullable):
+        super(SInt32Estimator, self).__init__(32, nullable)
 
 class SInt64Estimator(SignedBitwidthIntEstimator):
-    def __init__(self):
-        super(SInt64Estimator, self).__init__(64)
+    """
+    2の補数表現の64ビット整数を受け入れるもの
+    """
+    def __init__(self, nullable):
+        super(SInt64Estimator, self).__init__(64, nullable)
 
 class FloatClassEstimator(ValueEstimator):
+    """
+    浮動小数を受け入れるもの
+    """
     def __init__(self, minValue, maxValue, includesNaN, nullable):
         super(FloatClassEstimator, self).__init__(nullable)
         if not isinstance(minValue, float):
@@ -207,6 +238,10 @@ class FloatClassEstimator(ValueEstimator):
         else:
             return self.minValue <= float(strValue) <= self.maxValue
 
+class NotNaNFloatEstimator(FloatClassEstimator):
+    def __init__(self, nullable):
+        super(NotNaNFloatEstimator, self).__init__(float("-inf"), float("inf"), False, nullable)
+
 class DatetimeClassEstimator(ValueEstimator):
     def __init__(self, strpFormat, nullable):
         super(DatetimeClassEstimator, self).__init__(nullable)
@@ -214,6 +249,35 @@ class DatetimeClassEstimator(ValueEstimator):
         
     def _checkImpl(self, strValue):
         return datetime.strptime(strValue, self.strpFormat)
+
+class RegexDatetimeEstimator(ValueEstimator):
+    regexParts = "year month day hour minute second".split(" ")
+    def __init__(self, regex = r"(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})", regex_flags = 0, nullable = True):
+        super(RegexDatetimeEstimator, self).__init__(nullable)
+        self.regex = regex
+        self._pattern = re.compile(regex, regex_flags)
+        
+    def _checkImpl(self, strValue):
+        m = self._pattern.match(strValue)
+        return m
+
+class DisjunctionEstimator(ValueEstimator):
+    
+    def __init__(self, choice_estimators):
+        if not hasattr(choice_estimators, "__iter__"):
+            raise ValueError("%s is not an interable object" % choice_estimators)
+        for e in estimators:
+            if not isinstance(e, ValueEstimator):
+                raise ValueError("%s is not an estimator instance" % e)
+        self.__choices = list(choice_estimators) # clone
+    
+    @property
+    def choices(self):
+        return self.__choices
+    
+    def _checkImpl(self, strValue):
+        self.__choices = filter(lambda e: e._checkImpl(strValue), self.__choices)
+        
 
 # STRP_DIRECTIVES = ["%a", "%A", "%b", "%B", "%c", "%d", "%f", "%H", "%I", "%j", "%m", "%M", "%p", "%S", "%U", "%w", "%W", "%x", "%X", "%y", "%Y", "%z", "%Z"]
 # class RegexDatetimeClassEstimator(ValueEstimator):
@@ -258,5 +322,19 @@ class DatetimeClassEstimator(ValueEstimator):
 #             
 
 if __name__ == "__main__":
-    pass
+    estimators = (SInt32Estimator(False), NotNaNFloatEstimator(False))
+    ecs = [
+           EstimationContext(estimators), 
+           EstimationContext(estimators), 
+           EstimationContext(estimators)]
+    csv_data = \
+"""1.1,20,3.1
+4,5,6"""
+    sio = cStringIO.StringIO(csv_data)
+    r = csv.reader(sio)
+    for row in r:
+        for e, c in zip(ecs, row):
+            e.update(c)
+            print e
+    print [ec.feasible for ec in ecs]
     
